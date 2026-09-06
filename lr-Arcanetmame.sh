@@ -12,34 +12,15 @@ rp_module_flags=""
 
 function depends_lr-arcanetmame() {
     local depends=(git make gcc g++ zlib1g-dev libexpat1-dev)
-    get_depends "${depends[@]}"
+    getDepends "${depends[@]}"
 }
 
 function sources_lr-arcanetmame() {
-	local repo="${ARCANETMAME_REPO:-https://github.com/Zansword/Arcanetmame-libretro.git}"
-
-    if [ -n "${ARCANETMAME_SOURCE_DIR:-}" ]; then
-        rm -rf "$md_build"
-        mkdir -p "$md_build"
-        cp -a "${ARCANETMAME_SOURCE_DIR}/." "$md_build/"
-        return
-    fi
-
-    gitPullOrClone "$md_build" "$repo" "${ARCANETMAME_BRANCH:-main}"
+    gitPullOrClone "$md_build" "https://github.com/Zansword/Arcanetmame-libretro.git" main
 }
 
 function build_lr-arcanetmame() {
-    local build_dir="$md_build"
-    local params=("OSD=retro" "TARGETOS=linux")
-
-    if [ -f "$md_build/mame0135s/mame/Makefile.libretro" ]; then
-        build_dir="$md_build/mame0135s/mame"
-    fi
-
-    if [ ! -f "$build_dir/Makefile.libretro" ]; then
-        md_ret_errors+=("ArcanetMame Makefile.libretro was not found in the source tree.")
-        return 1
-    fi
+    local params=("OSD=retro" "TARGETOS=linux" "CC=cc" "LD=cc" "AR=ar")
 
     if [ "$(getconf LONG_BIT)" = "64" ]; then
         params+=("PTR64=1")
@@ -47,7 +28,7 @@ function build_lr-arcanetmame() {
         params+=("PTR64=0")
     fi
 
-    cd "$build_dir" || return 1
+    cd "$md_build" || return 1
     make clean "${params[@]}"
     make -f Makefile.libretro "${params[@]}" -j"$(nproc)"
 
