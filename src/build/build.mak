@@ -22,6 +22,10 @@ FILE2STR = $(BUILDOUT)/file2str$(BUILD_EXE)
 PNG2BDC = $(BUILDOUT)/png2bdc$(BUILD_EXE)
 VERINFO = $(BUILDOUT)/verinfo$(BUILD_EXE)
 
+ifeq ($(TARGETOS),linux)
+LIBS += -lm
+endif
+
 ifneq ($(CROSS_BUILD),1)
 BUILD += \
 	$(FILE2STR) \
