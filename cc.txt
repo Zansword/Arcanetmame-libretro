@@ -1,0 +1,1 @@
+set PATH=D:\compiler\mame2007\bin;%PATH%

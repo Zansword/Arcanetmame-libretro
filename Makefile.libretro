@@ -1,0 +1,17 @@
+# Linux/RetroPie libretro build for MAME 0.135.
+# Override platform or compiler variables from the command line when needed.
+
+OSD = retro
+TARGETOS ?= linux
+PTR64 ?= 0
+
+ifeq ($(TARGETOS),win32)
+LIBRETRO_TARGET = arcanetmame_libretro.dll
+else
+LIBRETRO_TARGET = arcanetmame_libretro.so
+endif
+
+all: $(LIBRETRO_TARGET)
+
+$(LIBRETRO_TARGET):
+	$(MAKE) OSD=$(OSD) TARGETOS=$(TARGETOS) PTR64=$(PTR64) CC="$(CC)" LD="$(LD)" AR="$(AR)" $@
