@@ -1575,7 +1575,7 @@ static MACHINE_DRIVER_START( coh700 )
 	MDRV_AT28C16_ADD( "at28c16", NULL )
 MACHINE_DRIVER_END
 
-static MACHINE_DRIVER_START( coh700_tektagt )
+static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* basic machine hardware */
 	// 메인 CPU: 50.8032 MHz (내부 연산 12.7008 MHz)
 	MDRV_CPU_ADD("maincpu",  CXD8661R, 50803200 )
@@ -2488,10 +2488,10 @@ ROM_START( toukon3 )
 	ROM_LOAD( "tr1wave1.4",  0x0400000, 0x400000, CRC(34539cdd) SHA1(afb7079c0f447fbda285a5b97a37c04baf26db75) )
 ROM_END
 
-GAME( 1996, tekken3,   0,        coh700,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (Japan, TET1/VER.E1)", 0 ) /* KC006 */
-GAME( 1996, tekken3a,  tekken3,  coh700,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (TET2/VER.B)", 0  ) /* KC006 */
-GAME( 1996, tekken3b,  tekken3,  coh700,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (TET3/VER.A)", 0  ) /* KC006 */
-GAME( 1996, tekken3c,  tekken3,  coh700,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (TET2/VER.A)", 0  ) /* KC006 */
+GAME( 1996, tekken3,   0,        coh700_namcos12,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (Japan, TET1/VER.E1)", 0 ) /* KC006 */
+GAME( 1996, tekken3a,  tekken3,  coh700_namcos12,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (TET2/VER.B)", 0  ) /* KC006 */
+GAME( 1996, tekken3b,  tekken3,  coh700_namcos12,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (TET3/VER.A)", 0  ) /* KC006 */
+GAME( 1996, tekken3c,  tekken3,  coh700_namcos12,   namcos12, namcos12, ROT0, "Namco",         "Tekken 3 (TET2/VER.A)", 0  ) /* KC006 */
 GAME( 1997, lbgrande,  0,        coh700,   namcos12, namcos12, ROT0, "Namco",         "Libero Grande (LG2/VER.A)", 0  ) /* KC006 */
 GAME( 1997, toukon3,   0,        coh700,   namcos12, namcos12, ROT0, "Tomy/Namco",    "Shin Nihon Pro Wrestling Toukon Retsuden 3 Arcade Edition (Japan, TR1/VER.A)", 0  ) /* KC019 */
 GAME( 1998, soulclbr,  0,        coh700,   namcos12, namcos12, ROT0, "Namco",         "Soul Calibur (SOC14/VER.C)", 0  )
@@ -2510,10 +2510,10 @@ GAME( 1998, fgtlayer,  0,        coh700,   namcos12, namcos12, ROT0, "Arika/Namc
 GAME( 1999, pacapp,    0,        coh700,   namcos12, namcos12, ROT0, "Produce/Namco", "Paca Paca Passion (Japan, PPP1/VER.A2)",0 ) /* KC038 */
 GAME( 1999, ptblank2,  0,        coh700,   ptblank2, ptblank2, ROT0, "Namco",         "Point Blank 2 (GNB5/VER.A)", 0 ) /* KC042 */
 GAME( 1999, sws99,     0,        coh700,   namcos12, namcos12, ROT0, "Namco",         "Super World Stadium '99 (Japan, SS91/VER.A3)", 0 ) /* KC043 */
-GAME( 1999, tektagt,   0,        coh700_tektagt,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (TEG3/VER.C1)", 0 ) /* KC044 */
-GAME( 1999, tektagta,  tektagt,  coh700_tektagt,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (TEG3/VER.B)", 0 ) /* KC044 */
-GAME( 1999, tektagtb,  tektagt,  coh700_tektagt,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (Japan, TEG1/VER.B)", 0 ) /* KC044 */
-GAME( 1999, tektagtc,  tektagt,  coh700_tektagt,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (Japan, TEG1/VER.A3)", 0 ) /* KC044 */
+GAME( 1999, tektagt,   0,        coh700_namcos12,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (TEG3/VER.C1)", 0 ) /* KC044 */
+GAME( 1999, tektagta,  tektagt,  coh700_namcos12,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (TEG3/VER.B)", 0 ) /* KC044 */
+GAME( 1999, tektagtb,  tektagt,  coh700_namcos12,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (Japan, TEG1/VER.B)", 0 ) /* KC044 */
+GAME( 1999, tektagtc,  tektagt,  coh700_namcos12,   namcos12, namcos12_tektagt, ROT0, "Namco",         "Tekken Tag Tournament (Japan, TEG1/VER.A3)", 0 ) /* KC044 */
 GAME( 1999, ghlpanic,  0,        coh700,   ghlpanic, ghlpanic, ROT0, "Namco",         "Ghoul Panic (OB2/VER.A)", 0 ) /* KC045 */
 GAME( 1999, pacapp2,   0,        coh700,   namcos12, namcos12, ROT0, "Produce/Namco", "Paca Paca Passion 2 (Japan, PKS1/VER.A)", 0 ) /* KC046 */
 GAME( 1999, mrdrillr,  0,        coh700,   namcos12, namcos12, ROT0, "Namco",         "Mr. Driller (Japan, DRI1/VER.A2)", 0 ) /* KC048 */
