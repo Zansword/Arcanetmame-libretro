@@ -105,6 +105,18 @@ static UINT32 a_bus[4];
 static UINT32 ctrl_index;
 static UINT32 internal_counter;
 static UINT8 char_offset; //helper to jump the decoding of the NULL chars.
+static UINT8 twcup98_prot_mode;
+static UINT8 stv_protection_type;
+
+enum
+{
+	STV_PROTECTION_STANDARD = 0,
+	STV_PROTECTION_TWCUP98,
+	STV_PROTECTION_ASTRASS,
+	STV_PROTECTION_DECATHLT
+};
+
+static void stv_protection_state_reset(void);
 /*
 ffreveng protection notes
 Global:
@@ -136,6 +148,12 @@ static const UINT32 vector_prot[] = { 0x0603B1B2,0x234 };
 #define ELANDORE_CTRL_5_DRAGON  0xfeff0000
 #define ELANDORE_CTRL_6_DRAGON  0xf9bf0000
 
+static const UINT32 twcup98_prot_data[8] =
+{
+	0x23232323, 0x23232323, 0x4c4c4c4c, 0x4c156301,
+	0x00000000, 0x00000000, 0x00000000, 0x00000000
+};
+
 
 static READ32_HANDLER( a_bus_ctrl_r )
 {
@@ -149,6 +167,27 @@ static READ32_HANDLER( a_bus_ctrl_r )
 			#ifdef MAME_DEBUG
 			popmessage("Prot read at %06x with data = %08x",cpu_get_pc(space->cpu),a_bus[3]);
 			#endif
+			if(twcup98_prot_mode && a_bus[3] == 0x12120000)
+			{
+				UINT32 res;
+
+				if(ctrl_index & 2)
+				{
+					res = (ROM[ctrl_index / 4] & 0x0000ffff) << 16;
+					res |= (ROM[(ctrl_index + 4) / 4] & 0xffff0000) >> 16;
+				}
+				else
+				{
+					res = ROM[ctrl_index / 4] & 0xffff0000;
+					res |= ROM[ctrl_index / 4] & 0x0000ffff;
+				}
+
+				if(ctrl_index >= (0x00d215a4 + 0x100c) && ctrl_index < (0x00d215a4 + 0x100c + 8 * 4))
+					res = twcup98_prot_data[(ctrl_index - (0x00d215a4 + 0x100c)) / 4];
+
+				ctrl_index += 4;
+				return res;
+			}
 			switch(a_bus[3])
 			{
 				case 0x01230000://astrass,char data in test mode PC=60118f2
@@ -275,6 +314,16 @@ static WRITE32_HANDLER ( a_bus_ctrl_w )
 	logerror("A-Bus control protection write at %06x: [%02x] <- %08x\n",cpu_get_pc(space->cpu),offset,data);
 	if(offset == 3)
 	{
+		if(twcup98_prot_mode && a_bus[3] == 0x12120000)
+		{
+			UINT32 a_bus_vector;
+			a_bus_vector = a_bus[2] >> 16;
+			a_bus_vector |= (a_bus[2] & 0xffff) << 16;
+			a_bus_vector <<= 1;
+			ctrl_index = a_bus_vector;
+			return;
+		}
+
 		//printf("MAIN : %08x  DATA : %08x\n",a_bus[3],a_bus[2]);
 		switch(a_bus[3])
 		{
@@ -329,6 +378,17 @@ static WRITE32_HANDLER ( a_bus_ctrl_w )
 
 void install_standard_protection(running_machine *machine)
 {
+	stv_protection_type = STV_PROTECTION_STANDARD;
+	twcup98_prot_mode = 0;
+	stv_protection_state_reset();
+	memory_install_readwrite32_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x4fffff0, 0x4ffffff, 0, 0, a_bus_ctrl_r, a_bus_ctrl_w);
+}
+
+void install_twcup98_protection(running_machine *machine)
+{
+	stv_protection_type = STV_PROTECTION_TWCUP98;
+	twcup98_prot_mode = 1;
+	stv_protection_state_reset();
 	memory_install_readwrite32_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x4fffff0, 0x4ffffff, 0, 0, a_bus_ctrl_r, a_bus_ctrl_w);
 }
 
@@ -362,7 +422,9 @@ static WRITE32_HANDLER(astrass_prot_w)
 
 void install_astrass_protection(running_machine *machine)
 {
-	ctrl_index = -1;
+	stv_protection_type = STV_PROTECTION_ASTRASS;
+	twcup98_prot_mode = 0;
+	stv_protection_state_reset();
 	memory_install_readwrite32_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x4fffff0, 0x4ffffff, 0, 0, astrass_prot_r, astrass_prot_w);
 }
 
@@ -375,6 +437,35 @@ static UINT32 decathlt_prot_uploadmode=0;
 static UINT32 decathlt_prot_uploadoffset=0;
 static UINT16 decathlt_prottable1[24];
 static UINT16 decathlt_prottable2[128];
+
+static void stv_protection_state_reset(void)
+{
+	memset(a_bus, 0, sizeof(a_bus));
+	internal_counter = 0;
+	char_offset = 0;
+
+	switch (stv_protection_type)
+	{
+		case STV_PROTECTION_ASTRASS:
+			ctrl_index = (UINT32)-1;
+			break;
+
+		case STV_PROTECTION_DECATHLT:
+			ctrl_index = 0;
+			memset(decathlt_protregs, 0, sizeof(decathlt_protregs));
+			decathlt_lastcount = 0;
+			decathlt_part = 1;
+			decathlt_prot_uploadmode = 0;
+			decathlt_prot_uploadoffset = 0;
+			memset(decathlt_prottable1, 0, sizeof(decathlt_prottable1));
+			memset(decathlt_prottable2, 0, sizeof(decathlt_prottable2));
+			break;
+
+		default:
+			ctrl_index = 0;
+			break;
+	}
+}
 
 static READ32_HANDLER( decathlt_prot_r )
 {
@@ -505,11 +596,9 @@ void install_decathlt_protection(running_machine *machine)
 {
 	/* It uploads 2 tables here, then performs what looks like a number of transfers, setting
        a source address of some kind (scrambled?) and then making many reads from a single address */
-	memset(decathlt_protregs, 0, sizeof(decathlt_protregs));
-	decathlt_lastcount = 0;
-	decathlt_prot_uploadmode = 0;
-	decathlt_prot_uploadoffset = 0;
-	decathlt_part = 1;
+	stv_protection_type = STV_PROTECTION_DECATHLT;
+	twcup98_prot_mode = 0;
+	stv_protection_state_reset();
 	memory_install_readwrite32_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x37FFFF0, 0x37FFFFF, 0, 0, decathlt_prot_r, decathlt_prot_w);
 	/* It uploads 2 tables here too, but nothing else, mirror? unused? */
 //  memory_install_readwrite32_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x27FFFF0, 0x27FFFFF, 0, 0, decathlt_prot_r, decathlt_prot_w);
@@ -521,4 +610,12 @@ void stv_register_protection_savestates(running_machine *machine)
 	state_save_register_global(machine, ctrl_index);
 	state_save_register_global(machine, internal_counter);
 	state_save_register_global(machine, char_offset);
+	state_save_register_global(machine, twcup98_prot_mode);
+	state_save_register_global(machine, stv_protection_type);
+}
+
+void stv_reset_protection_state(running_machine *machine)
+{
+	(void)machine;
+	stv_protection_state_reset();
 }

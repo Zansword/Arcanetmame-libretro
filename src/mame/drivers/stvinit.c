@@ -569,7 +569,7 @@ DRIVER_INIT(twcup98)
 	sh2drc_add_pcflush(cputag_get_cpu(machine, "slave"), 0x6062bca);
 
 	DRIVER_INIT_CALL(stv);
-	install_standard_protection(machine);
+	install_twcup98_protection(machine);
 
 	minit_boost_timeslice = sinit_boost_timeslice = ATTOTIME_IN_USEC(5);
 }
