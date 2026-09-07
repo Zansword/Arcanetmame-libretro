@@ -88,7 +88,7 @@ INLINE c352_state *get_safe_token(const device_config *device)
 	assert(device != NULL);
 	assert(device->token != NULL);
 	assert(device->type == SOUND);
-	assert(sound_get_type(device) == SOUND_C352);
+	assert(sound_get_type(device) == SOUND_C352 || sound_get_type(device) == SOUND_C352_TEKTAGT);
 	return (c352_state *)device->token;
 }
 
@@ -554,6 +554,19 @@ static DEVICE_START( c352 )
 	c352_init(info, device);
 }
 
+static DEVICE_START( c352_tektagt )
+{
+	c352_state *info = get_safe_token(device);
+
+	info->c352_rom_samples = device->region;
+	info->c352_rom_length = device->regionbytes;
+
+	info->sample_rate_base = device->clock / 342;
+
+	info->stream = stream_create(device, 0, 4, info->sample_rate_base, info, c352_update);
+
+	c352_init(info, device);
+}
 
 READ16_DEVICE_HANDLER( c352_r )
 {
@@ -600,6 +613,44 @@ DEVICE_GET_INFO( c352 )
 		case DEVINFO_STR_VERSION:					strcpy(info->s, "1.1");						break;
 		case DEVINFO_STR_SOURCE_FILE:						strcpy(info->s, __FILE__);					break;
 		case DEVINFO_STR_CREDITS:					strcpy(info->s, "Copyright Nicola Salmoria and the MAME Team"); break;
+	}
+}
+
+DEVICE_GET_INFO( c352_tektagt )
+{
+	switch (state)
+	{
+		case DEVINFO_INT_TOKEN_BYTES:
+			info->i = sizeof(c352_state);
+			break;
+
+		case DEVINFO_FCT_START:
+			info->start = DEVICE_START_NAME( c352_tektagt );
+			break;
+
+		case DEVINFO_FCT_STOP:
+		case DEVINFO_FCT_RESET:
+			break;
+
+		case DEVINFO_STR_NAME:
+			strcpy(info->s, "C352 (Tekken Tag)");
+			break;
+
+		case DEVINFO_STR_FAMILY:
+			strcpy(info->s, "Namco PCM");
+			break;
+
+		case DEVINFO_STR_VERSION:
+			strcpy(info->s, "1.1");
+			break;
+
+		case DEVINFO_STR_SOURCE_FILE:
+			strcpy(info->s, __FILE__);
+			break;
+
+		case DEVINFO_STR_CREDITS:
+			strcpy(info->s, "Copyright Nicola Salmoria and the MAME Team");
+			break;
 	}
 }
 

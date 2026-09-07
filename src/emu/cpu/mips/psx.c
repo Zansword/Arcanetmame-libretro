@@ -6415,14 +6415,13 @@ CPU_GET_INFO( psxcpu )
 }
 
 
-
+/*
 CPU_GET_INFO( cxd8661r )
 {
 	switch (state)
 	{
 		case CPUINFO_PTR_INTERNAL_MEMORY_MAP_PROGRAM: info->internal_map32 = ADDRESS_MAP_NAME(cxd8661r_internal_map); break;
 
-			/* --- the following bits of info are returned as NULL-terminated strings --- */
 		case DEVINFO_STR_NAME:							strcpy(info->s, "CXD8661R"); break;
 
 		default:
@@ -6430,4 +6429,32 @@ CPU_GET_INFO( cxd8661r )
 			break;
 	}
 }
+*/
 
+CPU_GET_INFO( cxd8661r )
+{
+    switch (state)
+    {
+        case CPUINFO_PTR_INTERNAL_MEMORY_MAP_PROGRAM: 
+            info->internal_map32 = ADDRESS_MAP_NAME(cxd8661r_internal_map); 
+            break;
+
+        case DEVINFO_STR_NAME:                          
+            strcpy(info->s, "CXD8661R"); 
+            break;
+
+        // ★ 시스템 12 코어 전용 분주비 가속 가로채기 루틴 추가!
+        case CPUINFO_INT_CLOCK_DIVIDER:       
+            // 기존의 4(2*2) 대신 2로 설정합니다. 
+            // 이렇게 하면 드라이버 클럭이 순정(50.8MHz) 상태여도 
+            // MAME 커널이 명령어 처리 속도를 가상으로 2배(25.4MHz 효과)로 펌핑시켜 줍니다.
+            // 만약 저사양 PC에서 이래도 느리다면 이 값을 '1'까지 낮추셔도 됩니다.
+            info->i = 2; 
+            break;
+
+        default:
+            // 그 외의 기본 정보는 상위 psxcpu의 규격을 그대로 계승함
+            CPU_GET_INFO_CALL(psxcpu);
+            break;
+    }
+}
