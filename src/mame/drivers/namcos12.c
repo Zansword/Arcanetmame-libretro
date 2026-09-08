@@ -1577,12 +1577,12 @@ MACHINE_DRIVER_END
 
 static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* basic machine hardware */
-	MDRV_CPU_ADD("maincpu",  CXD8661R, 48000000 )
+	MDRV_CPU_ADD("maincpu",  CXD8661R, 33868800)
 	MDRV_CPU_PROGRAM_MAP( namcos12_map)
 	MDRV_CPU_VBLANK_INT("screen", psx_vblank)
 
 	// 서브 CPU: 16.73735 MHz (실기 마스터 오실레이터 분주값)
-	MDRV_CPU_ADD("sub", H83002, 16700000 )
+	MDRV_CPU_ADD("sub", H83002, 16737350)
 	MDRV_CPU_PROGRAM_MAP( s12h8rwmap)
 	MDRV_CPU_IO_MAP( s12h8iomap)
 	MDRV_CPU_VBLANK_INT("screen", irq1_line_pulse)
@@ -1609,7 +1609,7 @@ static MACHINE_DRIVER_START( coh700_namcos12 )
 	MDRV_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	// 사운드 칩셋: 29.168 MHz (오디오 독립 오실레이터)
-	MDRV_SOUND_ADD("c352", C352_TEKTAGT, 29160000)
+	MDRV_SOUND_ADD("c352", C352_TEKTAGT, 29168640)
 	MDRV_SOUND_ROUTE(0, "rspeaker", 1.00)
 	MDRV_SOUND_ROUTE(1, "lspeaker", 1.00)
 	MDRV_SOUND_ROUTE(2, "rspeaker", 1.00)
