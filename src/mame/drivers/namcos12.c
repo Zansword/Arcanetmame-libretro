@@ -1578,7 +1578,7 @@ MACHINE_DRIVER_END
 static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* basic machine hardware */
 	// 메인 CPU: 50.8032 MHz (내부 연산 12.7008 MHz)
-	MDRV_CPU_ADD("maincpu",  CXD8661R, 50803200 )
+	MDRV_CPU_ADD("maincpu",  CXD8661R, 48000000 )
 	MDRV_CPU_PROGRAM_MAP( namcos12_map)
 	MDRV_CPU_VBLANK_INT("screen", psx_vblank)
 
