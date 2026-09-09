@@ -1577,7 +1577,8 @@ MACHINE_DRIVER_END
 
 static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* basic machine hardware */
-	MDRV_CPU_ADD("maincpu",  CXD8661R, 33868800)
+//	MDRV_CPU_ADD("maincpu",  CXD8661R, 33868800)
+	MDRV_CPU_ADD("maincpu",  CXD8661R, 25000000)
 	MDRV_CPU_PROGRAM_MAP( namcos12_map)
 	MDRV_CPU_VBLANK_INT("screen", psx_vblank)
 
