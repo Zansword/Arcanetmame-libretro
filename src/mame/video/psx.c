@@ -253,6 +253,58 @@ static int need_sianniv_vblank_hack;
 #define TEXTURE_V( a ) ( (UINT8)a.b.h )
 #define TEXTURE_U( a ) ( (UINT8)a.b.l )
 
+/* reciprocal-multiply replacement for the DDA setup divisions (edge/scanline slope calculation) */
+#define RECIPROCAL_TABLE_SIZE ( 2048 )
+static UINT32 m_p_n_reciprocal[ RECIPROCAL_TABLE_SIZE ];
+
+/* cache of the last decoded texture page, avoids re-decoding an unchanged tpage every polygon */
+static UINT32 m_n_lasttpage;
+static int m_b_lasttpagevalid;
+
+static void psx_build_reciprocal_table( void )
+{
+	UINT32 n;
+
+	m_p_n_reciprocal[ 0 ] = 0; /* never used, divisor is always >= 1 */
+	for( n = 1; n < RECIPROCAL_TABLE_SIZE; n++ )
+	{
+		m_p_n_reciprocal[ n ] = (UINT32)( ( (UINT64)1 << 32 ) / n );
+	}
+}
+
+/* exact truncating division ( == numerator / denominator ) without a hardware divide in the common case */
+INLINE INT32 psx_reciprocal_divide( INT32 numerator, INT32 denominator )
+{
+	UINT32 un;
+	UINT32 uq;
+	UINT32 ur;
+
+	/* denominator == 1 can't be represented in the 2^32 / n table without overflow; it's also a no-op */
+	if( denominator == 1 )
+	{
+		return numerator;
+	}
+
+	un = ( numerator < 0 ) ? (UINT32)( -numerator ) : (UINT32)numerator;
+
+	if( (UINT32)denominator < RECIPROCAL_TABLE_SIZE )
+	{
+		uq = (UINT32)( ( (UINT64)un * m_p_n_reciprocal[ denominator ] ) >> 32 );
+		ur = un - ( uq * (UINT32)denominator );
+		while( ur >= (UINT32)denominator )
+		{
+			uq++;
+			ur -= (UINT32)denominator;
+		}
+	}
+	else
+	{
+		uq = un / (UINT32)denominator;
+	}
+
+	return ( numerator < 0 ) ? -(INT32)uq : (INT32)uq;
+}
+
 PALETTE_INIT( psx )
 {
 	UINT32 n_colour;
@@ -633,6 +685,9 @@ static void psx_gpu_init( running_machine *machine )
 	DebugMeshInit(machine);
 #endif
 
+	psx_build_reciprocal_table();
+	m_b_lasttpagevalid = 0;
+
 	m_n_gpustatus = 0x14802000;
 	m_n_gpuinfo = 0;
 	m_n_gpu_buffer_offset = 0;
@@ -877,7 +932,6 @@ VIDEO_UPDATE( psx )
 		if (n_left > m_n_screenwidth - n_columns)
 			n_left = m_n_screenwidth - n_columns;
 		// MAMEFX end
-
 		if( n_left < 0 )
 		{
 			n_x = -n_left;
@@ -956,6 +1010,14 @@ f  e| d  c| b| a  9| 8  7| 6  5| 4| 3  2  1  0
 
 INLINE void decode_tpage( running_machine *machine, struct PSXGPU *p_psxgpu, UINT32 tpage )
 {
+	/* tpage is unchanged from the previous polygon most of the time; skip the redundant decode */
+	if( m_b_lasttpagevalid && tpage == m_n_lasttpage )
+	{
+		return;
+	}
+	m_n_lasttpage = tpage;
+	m_b_lasttpagevalid = 1;
+
 	if( m_n_gputype == 2 )
 	{
 		m_n_gpustatus = ( m_n_gpustatus & 0xfffff800 ) | ( tpage & 0x7ff );
@@ -1565,7 +1627,7 @@ static void FlatPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx1 = (INT32)( ( COORD_X( m_packet.FlatPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ) / n_distance;
+			n_dx1 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.FlatPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ), n_distance );
 		}
 		if( n_y == COORD_Y( m_packet.FlatPolygon.vertex[ n_rightpoint ].n_coord ) )
 		{
@@ -1584,7 +1646,7 @@ static void FlatPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx2 = (INT32)( ( COORD_X( m_packet.FlatPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ) / n_distance;
+			n_dx2 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.FlatPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ), n_distance );
 		}
 		if( (INT16)n_cx1.w.h != (INT16)n_cx2.w.h && n_y >= (INT32)m_n_drawarea_y1 && n_y <= (INT32)m_n_drawarea_y2 )
 		{
@@ -1765,9 +1827,9 @@ static void FlatTexturedPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx1 = (INT32)( ( COORD_X( m_packet.FlatTexturedPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ) / n_distance;
-			n_du1 = (INT32)( ( TEXTURE_U( m_packet.FlatTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cu1.d ) / n_distance;
-			n_dv1 = (INT32)( ( TEXTURE_V( m_packet.FlatTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cv1.d ) / n_distance;
+			n_dx1 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.FlatTexturedPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ), n_distance );
+			n_du1 = psx_reciprocal_divide( (INT32)( ( TEXTURE_U( m_packet.FlatTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cu1.d ), n_distance );
+			n_dv1 = psx_reciprocal_divide( (INT32)( ( TEXTURE_V( m_packet.FlatTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cv1.d ), n_distance );
 		}
 		if( n_y == COORD_Y( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_coord ) )
 		{
@@ -1788,9 +1850,9 @@ static void FlatTexturedPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx2 = (INT32)( ( COORD_X( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ) / n_distance;
-			n_du2 = (INT32)( ( TEXTURE_U( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cu2.d ) / n_distance;
-			n_dv2 = (INT32)( ( TEXTURE_V( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cv2.d ) / n_distance;
+			n_dx2 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ), n_distance );
+			n_du2 = psx_reciprocal_divide( (INT32)( ( TEXTURE_U( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cu2.d ), n_distance );
+			n_dv2 = psx_reciprocal_divide( (INT32)( ( TEXTURE_V( m_packet.FlatTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cv2.d ), n_distance );
 		}
 		if( (INT16)n_cx1.w.h != (INT16)n_cx2.w.h && n_y >= (INT32)m_n_drawarea_y1 && n_y <= (INT32)m_n_drawarea_y2 )
 		{
@@ -1801,8 +1863,8 @@ static void FlatTexturedPolygon( running_machine *machine, int n_points )
 
 				n_u.d = n_cu1.d;
 				n_v.d = n_cv1.d;
-				n_du = (INT32)( n_cu2.d - n_cu1.d ) / n_distance;
-				n_dv = (INT32)( n_cv2.d - n_cv1.d ) / n_distance;
+				n_du = psx_reciprocal_divide( (INT32)( n_cu2.d - n_cu1.d ), n_distance );
+				n_dv = psx_reciprocal_divide( (INT32)( n_cv2.d - n_cv1.d ), n_distance );
 			}
 			else
 			{
@@ -1811,8 +1873,8 @@ static void FlatTexturedPolygon( running_machine *machine, int n_points )
 
 				n_u.d = n_cu2.d;
 				n_v.d = n_cv2.d;
-				n_du = (INT32)( n_cu1.d - n_cu2.d ) / n_distance;
-				n_dv = (INT32)( n_cv1.d - n_cv2.d ) / n_distance;
+				n_du = psx_reciprocal_divide( (INT32)( n_cu1.d - n_cu2.d ), n_distance );
+				n_dv = psx_reciprocal_divide( (INT32)( n_cv1.d - n_cv2.d ), n_distance );
 			}
 
 			if( ( (INT32)m_n_drawarea_x1 - n_x ) > 0 )
@@ -1968,10 +2030,10 @@ static void GouraudPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx1 = (INT32)( ( COORD_X( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ) / n_distance;
-			n_dr1 = (INT32)( ( BGR_R( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cr1.d ) / n_distance;
-			n_dg1 = (INT32)( ( BGR_G( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cg1.d ) / n_distance;
-			n_db1 = (INT32)( ( BGR_B( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cb1.d ) / n_distance;
+			n_dx1 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ), n_distance );
+			n_dr1 = psx_reciprocal_divide( (INT32)( ( BGR_R( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cr1.d ), n_distance );
+			n_dg1 = psx_reciprocal_divide( (INT32)( ( BGR_G( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cg1.d ), n_distance );
+			n_db1 = psx_reciprocal_divide( (INT32)( ( BGR_B( m_packet.GouraudPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cb1.d ), n_distance );
 		}
 		if( n_y == COORD_Y( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_coord ) )
 		{
@@ -1993,10 +2055,10 @@ static void GouraudPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx2 = (INT32)( ( COORD_X( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ) / n_distance;
-			n_dr2 = (INT32)( ( BGR_R( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cr2.d ) / n_distance;
-			n_dg2 = (INT32)( ( BGR_G( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cg2.d ) / n_distance;
-			n_db2 = (INT32)( ( BGR_B( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cb2.d ) / n_distance;
+			n_dx2 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ), n_distance );
+			n_dr2 = psx_reciprocal_divide( (INT32)( ( BGR_R( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cr2.d ), n_distance );
+			n_dg2 = psx_reciprocal_divide( (INT32)( ( BGR_G( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cg2.d ), n_distance );
+			n_db2 = psx_reciprocal_divide( (INT32)( ( BGR_B( m_packet.GouraudPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cb2.d ), n_distance );
 		}
 		if( (INT16)n_cx1.w.h != (INT16)n_cx2.w.h && n_y >= (INT32)m_n_drawarea_y1 && n_y <= (INT32)m_n_drawarea_y2 )
 		{
@@ -2008,9 +2070,9 @@ static void GouraudPolygon( running_machine *machine, int n_points )
 				n_r.d = n_cr1.d;
 				n_g.d = n_cg1.d;
 				n_b.d = n_cb1.d;
-				n_dr = (INT32)( n_cr2.d - n_cr1.d ) / n_distance;
-				n_dg = (INT32)( n_cg2.d - n_cg1.d ) / n_distance;
-				n_db = (INT32)( n_cb2.d - n_cb1.d ) / n_distance;
+				n_dr = psx_reciprocal_divide( (INT32)( n_cr2.d - n_cr1.d ), n_distance );
+				n_dg = psx_reciprocal_divide( (INT32)( n_cg2.d - n_cg1.d ), n_distance );
+				n_db = psx_reciprocal_divide( (INT32)( n_cb2.d - n_cb1.d ), n_distance );
 			}
 			else
 			{
@@ -2020,9 +2082,9 @@ static void GouraudPolygon( running_machine *machine, int n_points )
 				n_r.d = n_cr2.d;
 				n_g.d = n_cg2.d;
 				n_b.d = n_cb2.d;
-				n_dr = (INT32)( n_cr1.d - n_cr2.d ) / n_distance;
-				n_dg = (INT32)( n_cg1.d - n_cg2.d ) / n_distance;
-				n_db = (INT32)( n_cb1.d - n_cb2.d ) / n_distance;
+				n_dr = psx_reciprocal_divide( (INT32)( n_cr1.d - n_cr2.d ), n_distance );
+				n_dg = psx_reciprocal_divide( (INT32)( n_cg1.d - n_cg2.d ), n_distance );
+				n_db = psx_reciprocal_divide( (INT32)( n_cb1.d - n_cb2.d ), n_distance );
 			}
 
 			if( ( (INT32)m_n_drawarea_x1 - n_x ) > 0 )
@@ -2223,13 +2285,13 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx1 = (INT32)( ( COORD_X( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ) / n_distance;
+			n_dx1 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_coord ) << 16 ) - n_cx1.d ), n_distance );
 			switch( n_cmd & 0x01 )
 			{
 			case 0x00:
-				n_dr1 = (INT32)( ( BGR_R( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cr1.d ) / n_distance;
-				n_dg1 = (INT32)( ( BGR_G( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cg1.d ) / n_distance;
-				n_db1 = (INT32)( ( BGR_B( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cb1.d ) / n_distance;
+				n_dr1 = psx_reciprocal_divide( (INT32)( ( BGR_R( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cr1.d ), n_distance );
+				n_dg1 = psx_reciprocal_divide( (INT32)( ( BGR_G( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cg1.d ), n_distance );
+				n_db1 = psx_reciprocal_divide( (INT32)( ( BGR_B( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_bgr ) << 16 ) - n_cb1.d ), n_distance );
 				break;
 			case 0x01:
 				n_dr1 = 0;
@@ -2237,8 +2299,8 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 				n_db1 = 0;
 				break;
 			}
-			n_du1 = (INT32)( ( TEXTURE_U( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cu1.d ) / n_distance;
-			n_dv1 = (INT32)( ( TEXTURE_V( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cv1.d ) / n_distance;
+			n_du1 = psx_reciprocal_divide( (INT32)( ( TEXTURE_U( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cu1.d ), n_distance );
+			n_dv1 = psx_reciprocal_divide( (INT32)( ( TEXTURE_V( m_packet.GouraudTexturedPolygon.vertex[ n_leftpoint ].n_texture ) << 16 ) - n_cv1.d ), n_distance );
 		}
 		if( n_y == COORD_Y( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_coord ) )
 		{
@@ -2272,13 +2334,13 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 			{
 				break;
 			}
-			n_dx2 = (INT32)( ( COORD_X( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ) / n_distance;
+			n_dx2 = psx_reciprocal_divide( (INT32)( ( COORD_X( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_coord ) << 16 ) - n_cx2.d ), n_distance );
 			switch( n_cmd & 0x01 )
 			{
 			case 0x00:
-				n_dr2 = (INT32)( ( BGR_R( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cr2.d ) / n_distance;
-				n_dg2 = (INT32)( ( BGR_G( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cg2.d ) / n_distance;
-				n_db2 = (INT32)( ( BGR_B( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cb2.d ) / n_distance;
+				n_dr2 = psx_reciprocal_divide( (INT32)( ( BGR_R( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cr2.d ), n_distance );
+				n_dg2 = psx_reciprocal_divide( (INT32)( ( BGR_G( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cg2.d ), n_distance );
+				n_db2 = psx_reciprocal_divide( (INT32)( ( BGR_B( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_bgr ) << 16 ) - n_cb2.d ), n_distance );
 				break;
 			case 0x01:
 				n_dr2 = 0;
@@ -2286,8 +2348,8 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 				n_db2 = 0;
 				break;
 			}
-			n_du2 = (INT32)( ( TEXTURE_U( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cu2.d ) / n_distance;
-			n_dv2 = (INT32)( ( TEXTURE_V( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cv2.d ) / n_distance;
+			n_du2 = psx_reciprocal_divide( (INT32)( ( TEXTURE_U( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cu2.d ), n_distance );
+			n_dv2 = psx_reciprocal_divide( (INT32)( ( TEXTURE_V( m_packet.GouraudTexturedPolygon.vertex[ n_rightpoint ].n_texture ) << 16 ) - n_cv2.d ), n_distance );
 		}
 		if( (INT16)n_cx1.w.h != (INT16)n_cx2.w.h && n_y >= (INT32)m_n_drawarea_y1 && n_y <= (INT32)m_n_drawarea_y2 )
 		{
@@ -2301,11 +2363,11 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 				n_b.d = n_cb1.d;
 				n_u.d = n_cu1.d;
 				n_v.d = n_cv1.d;
-				n_dr = (INT32)( n_cr2.d - n_cr1.d ) / n_distance;
-				n_dg = (INT32)( n_cg2.d - n_cg1.d ) / n_distance;
-				n_db = (INT32)( n_cb2.d - n_cb1.d ) / n_distance;
-				n_du = (INT32)( n_cu2.d - n_cu1.d ) / n_distance;
-				n_dv = (INT32)( n_cv2.d - n_cv1.d ) / n_distance;
+				n_dr = psx_reciprocal_divide( (INT32)( n_cr2.d - n_cr1.d ), n_distance );
+				n_dg = psx_reciprocal_divide( (INT32)( n_cg2.d - n_cg1.d ), n_distance );
+				n_db = psx_reciprocal_divide( (INT32)( n_cb2.d - n_cb1.d ), n_distance );
+				n_du = psx_reciprocal_divide( (INT32)( n_cu2.d - n_cu1.d ), n_distance );
+				n_dv = psx_reciprocal_divide( (INT32)( n_cv2.d - n_cv1.d ), n_distance );
 			}
 			else
 			{
@@ -2317,11 +2379,11 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 				n_b.d = n_cb2.d;
 				n_u.d = n_cu2.d;
 				n_v.d = n_cv2.d;
-				n_dr = (INT32)( n_cr1.d - n_cr2.d ) / n_distance;
-				n_dg = (INT32)( n_cg1.d - n_cg2.d ) / n_distance;
-				n_db = (INT32)( n_cb1.d - n_cb2.d ) / n_distance;
-				n_du = (INT32)( n_cu1.d - n_cu2.d ) / n_distance;
-				n_dv = (INT32)( n_cv1.d - n_cv2.d ) / n_distance;
+				n_dr = psx_reciprocal_divide( (INT32)( n_cr1.d - n_cr2.d ), n_distance );
+				n_dg = psx_reciprocal_divide( (INT32)( n_cg1.d - n_cg2.d ), n_distance );
+				n_db = psx_reciprocal_divide( (INT32)( n_cb1.d - n_cb2.d ), n_distance );
+				n_du = psx_reciprocal_divide( (INT32)( n_cu1.d - n_cu2.d ), n_distance );
+				n_dv = psx_reciprocal_divide( (INT32)( n_cv1.d - n_cv2.d ), n_distance );
 			}
 
 			if( ( (INT32)m_n_drawarea_x1 - n_x ) > 0 )
@@ -2427,8 +2489,8 @@ static void MonochromeLine( void )
 	n_x.w.h = n_xstart; n_x.w.l = 0;
 	n_y.w.h = n_ystart; n_y.w.l = 0;
 
-	n_dx = (INT32)( ( n_xend << 16 ) - n_x.d ) / n_len;
-	n_dy = (INT32)( ( n_yend << 16 ) - n_y.d ) / n_len;
+	n_dx = psx_reciprocal_divide( (INT32)( ( n_xend << 16 ) - n_x.d ), n_len );
+	n_dy = psx_reciprocal_divide( (INT32)( ( n_yend << 16 ) - n_y.d ), n_len );
 	n_dr = 0;
 	n_dg = 0;
 	n_db = 0;
@@ -2539,11 +2601,11 @@ static void GouraudLine( void )
 		n_distance = 1;
 	}
 
-	n_dx = (INT32)( ( n_xend << 16 ) - n_x.d ) / n_distance;
-	n_dy = (INT32)( ( n_yend << 16 ) - n_y.d ) / n_distance;
-	n_dr = (INT32)( n_cr2.d - n_cr1.d ) / n_distance;
-	n_dg = (INT32)( n_cg2.d - n_cg1.d ) / n_distance;
-	n_db = (INT32)( n_cb2.d - n_cb1.d ) / n_distance;
+	n_dx = psx_reciprocal_divide( (INT32)( ( n_xend << 16 ) - n_x.d ), n_distance );
+	n_dy = psx_reciprocal_divide( (INT32)( ( n_yend << 16 ) - n_y.d ), n_distance );
+	n_dr = psx_reciprocal_divide( (INT32)( n_cr2.d - n_cr1.d ), n_distance );
+	n_dg = psx_reciprocal_divide( (INT32)( n_cg2.d - n_cg1.d ), n_distance );
+	n_db = psx_reciprocal_divide( (INT32)( n_cb2.d - n_cb1.d ), n_distance );
 
 	while( n_distance > 0 )
 	{
