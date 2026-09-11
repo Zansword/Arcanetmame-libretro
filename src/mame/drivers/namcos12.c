@@ -1577,13 +1577,11 @@ MACHINE_DRIVER_END
 
 static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* basic machine hardware */
-//	MDRV_CPU_ADD("maincpu",  CXD8661R, 33868800)
 	MDRV_CPU_ADD("maincpu",  CXD8661R, 25000000)
 	MDRV_CPU_PROGRAM_MAP( namcos12_map)
 	MDRV_CPU_VBLANK_INT("screen", psx_vblank)
 
-	// 서브 CPU: 16.73735 MHz (실기 마스터 오실레이터 분주값)
-	MDRV_CPU_ADD("sub", H83002, 16737350)
+	MDRV_CPU_ADD("sub", H83002, 16384000)
 	MDRV_CPU_PROGRAM_MAP( s12h8rwmap)
 	MDRV_CPU_IO_MAP( s12h8iomap)
 	MDRV_CPU_VBLANK_INT("screen", irq1_line_pulse)
@@ -1595,7 +1593,7 @@ static MACHINE_DRIVER_START( coh700_namcos12 )
 	// 화면 주사율을 실기기 수치인 59.185606 Hz로 수정
 	MDRV_SCREEN_REFRESH_RATE( 59.185606 )
 	// PSX 비디오 칩셋 규격에 맞는 정확한 VBLANK 타임 적용 (0에서 실측치로 변경)
-	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500))
+	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
 	MDRV_SCREEN_SIZE( 1024, 1024 )
 	MDRV_SCREEN_VISIBLE_AREA( 0, 639, 0, 479 )
@@ -1609,8 +1607,7 @@ static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	// 사운드 칩셋: 29.168 MHz (오디오 독립 오실레이터)
-	MDRV_SOUND_ADD("c352", C352_TEKTAGT, 29168640)
+	MDRV_SOUND_ADD("c352", C352, 16384000)
 	MDRV_SOUND_ROUTE(0, "rspeaker", 1.00)
 	MDRV_SOUND_ROUTE(1, "lspeaker", 1.00)
 	MDRV_SOUND_ROUTE(2, "rspeaker", 1.00)
