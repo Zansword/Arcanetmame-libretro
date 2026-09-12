@@ -261,6 +261,211 @@ static UINT32 m_p_n_reciprocal[ RECIPROCAL_TABLE_SIZE ];
 static UINT32 m_n_lasttpage;
 static int m_b_lasttpagevalid;
 
+/* Expanded texel caches for the common non-interleaved 4bpp/8bpp paths. */
+#define PSX_TEXTURE_PAGE_COUNT ( 64 )
+#define PSX_TEXTURE_PAGE_SIZE ( 256 * 256 )
+static UINT8 *m_p_texture4_cache;
+static UINT8 *m_p_texture8_cache;
+static UINT32 m_n_texture4_dirty[ 2 ];
+static UINT32 m_n_texture8_dirty[ 2 ];
+static UINT8 *m_p_texture4_page;
+static UINT8 *m_p_texture8_page;
+static int m_b_texture_cache_framebuffer_dirty;
+
+INLINE void psx_texture_cache_mark_all_dirty( void )
+{
+	m_n_texture4_dirty[ 0 ] = 0xffffffff;
+	m_n_texture4_dirty[ 1 ] = 0xffffffff;
+	m_n_texture8_dirty[ 0 ] = 0xffffffff;
+	m_n_texture8_dirty[ 1 ] = 0xffffffff;
+}
+
+INLINE void psx_texture_cache_mark_page_dirty( UINT32 page )
+{
+	if( page < PSX_TEXTURE_PAGE_COUNT )
+	{
+		m_n_texture4_dirty[ page >> 5 ] |= 1 << ( page & 31 );
+		m_n_texture8_dirty[ page >> 5 ] |= 1 << ( page & 31 );
+	}
+}
+
+static void psx_texture_cache_mark_region_dirty( INT32 x, INT32 y, INT32 width, INT32 height )
+{
+	INT32 dx;
+	INT32 dy;
+	INT32 nx;
+	INT32 ny;
+	UINT32 page;
+
+	if( width <= 0 || height <= 0 )
+	{
+		return;
+	}
+	if( width >= 1024 || height >= 1024 )
+	{
+		psx_texture_cache_mark_all_dirty();
+		return;
+	}
+
+	for( dy = 0; dy < height; dy += 256 )
+	{
+		for( dx = 0; dx < width; dx += 64 )
+		{
+			nx = ( x + dx ) % 1024;
+			ny = ( y + dy ) % 1024;
+		if( nx < 0 ) nx += 1024;
+		if( ny < 0 ) ny += 1024;
+		page = ( (UINT32)nx >> 6 ) | ( ( (UINT32)ny >> 8 ) << 4 );
+		psx_texture_cache_mark_page_dirty( page );
+		}
+		nx = ( x + width - 1 ) % 1024;
+		ny = ( y + dy ) % 1024;
+		if( nx < 0 ) nx += 1024;
+		if( ny < 0 ) ny += 1024;
+		page = ( (UINT32)nx >> 6 ) | ( ( (UINT32)ny >> 8 ) << 4 );
+		psx_texture_cache_mark_page_dirty( page );
+	}
+
+	nx = ( x + width - 1 ) % 1024;
+	ny = ( y + height - 1 ) % 1024;
+	if( nx < 0 ) nx += 1024;
+	if( ny < 0 ) ny += 1024;
+	page = ( (UINT32)nx >> 6 ) | ( ( (UINT32)ny >> 8 ) << 4 );
+	psx_texture_cache_mark_page_dirty( page );
+}
+
+INLINE void psx_texture_cache_mark_framebuffer_region_dirty( INT32 x, INT32 y, INT32 width, INT32 height )
+{
+	if( m_b_texture_cache_framebuffer_dirty )
+	{
+		psx_texture_cache_mark_region_dirty( x, y, width, height );
+	}
+}
+
+#define PSX_TEXTURE_CACHE_MARK_POLYGON( polygon ) \
+{ \
+	INT32 cache_min_x = COORD_X( m_packet.polygon.vertex[ 0 ].n_coord ); \
+	INT32 cache_max_x = cache_min_x; \
+	INT32 cache_min_y = COORD_Y( m_packet.polygon.vertex[ 0 ].n_coord ); \
+	INT32 cache_max_y = cache_min_y; \
+	UINT16 cache_vertex; \
+	for( cache_vertex = 1; cache_vertex < n_points; cache_vertex++ ) \
+	{ \
+		if( COORD_X( m_packet.polygon.vertex[ cache_vertex ].n_coord ) < cache_min_x ) cache_min_x = COORD_X( m_packet.polygon.vertex[ cache_vertex ].n_coord ); \
+		if( COORD_X( m_packet.polygon.vertex[ cache_vertex ].n_coord ) > cache_max_x ) cache_max_x = COORD_X( m_packet.polygon.vertex[ cache_vertex ].n_coord ); \
+		if( COORD_Y( m_packet.polygon.vertex[ cache_vertex ].n_coord ) < cache_min_y ) cache_min_y = COORD_Y( m_packet.polygon.vertex[ cache_vertex ].n_coord ); \
+		if( COORD_Y( m_packet.polygon.vertex[ cache_vertex ].n_coord ) > cache_max_y ) cache_max_y = COORD_Y( m_packet.polygon.vertex[ cache_vertex ].n_coord ); \
+	} \
+	psx_texture_cache_mark_framebuffer_region_dirty( cache_min_x, cache_min_y, cache_max_x - cache_min_x + 1, cache_max_y - cache_min_y + 1 ); \
+}
+
+static void psx_texture_cache_update_page( UINT32 page, UINT32 texture_mode )
+{
+	UINT32 x;
+	UINT32 y;
+	UINT32 base_x;
+	UINT32 base_y;
+	UINT32 source_x;
+	UINT32 source_y;
+	UINT16 source;
+	UINT8 *cache4;
+	UINT8 *cache8;
+
+	if( page >= PSX_TEXTURE_PAGE_COUNT )
+	{
+		return;
+	}
+
+	cache4 = m_p_texture4_cache + page * PSX_TEXTURE_PAGE_SIZE;
+	cache8 = m_p_texture8_cache + page * PSX_TEXTURE_PAGE_SIZE;
+	base_x = ( page & 15 ) * 64;
+	base_y = ( page >> 4 ) * 256;
+
+	for( y = 0; y < 256; y++ )
+	{
+		source_y = ( base_y + y ) & 1023;
+		for( x = 0; x < 256; x++ )
+		{
+			if( texture_mode == 0 )
+			{
+				source_x = ( base_x + ( x >> 2 ) ) & 1023;
+				source = m_p_p_vram[ source_y ][ source_x ];
+				cache4[ y * 256 + x ] = ( source >> ( ( x & 3 ) << 2 ) ) & 0x0f;
+			}
+			else
+			{
+				source_x = ( base_x + ( x >> 1 ) ) & 1023;
+				source = m_p_p_vram[ source_y ][ source_x ];
+				cache8[ y * 256 + x ] = ( source >> ( ( x & 1 ) << 3 ) ) & 0xff;
+			}
+		}
+	}
+
+	if( texture_mode == 0 )
+	{
+		m_n_texture4_dirty[ page >> 5 ] &= ~( 1 << ( page & 31 ) );
+	}
+	else
+	{
+		m_n_texture8_dirty[ page >> 5 ] &= ~( 1 << ( page & 31 ) );
+	}
+}
+
+static void psx_texture_cache_prepare( struct PSXGPU *p_psxgpu )
+{
+	UINT32 page;
+
+	m_p_texture4_page = NULL;
+	m_p_texture8_page = NULL;
+	if( p_psxgpu->n_ti != 0 || p_psxgpu->n_tp != 0 ||
+		m_n_twx != 0 || m_n_twy != 0 || m_n_tww != 255 || m_n_twh != 255 )
+	{
+		return;
+	}
+
+	page = ( (UINT32)p_psxgpu->n_tx >> 6 ) |
+		( ( (UINT32)p_psxgpu->n_ty >> 8 ) << 4 );
+	if( page >= PSX_TEXTURE_PAGE_COUNT )
+	{
+		return;
+	}
+
+	if( ( m_n_texture4_dirty[ page >> 5 ] & ( 1 << ( page & 31 ) ) ) != 0 )
+	{
+		psx_texture_cache_update_page( page, p_psxgpu->n_tp );
+	}
+	if( p_psxgpu->n_tp == 0 )
+	{
+		m_p_texture4_page = m_p_texture4_cache + page * PSX_TEXTURE_PAGE_SIZE;
+	}
+	else if( ( m_n_texture8_dirty[ page >> 5 ] & ( 1 << ( page & 31 ) ) ) != 0 )
+	{
+		psx_texture_cache_update_page( page, p_psxgpu->n_tp );
+	}
+	if( p_psxgpu->n_tp == 1 )
+	{
+		m_p_texture8_page = m_p_texture8_cache + page * PSX_TEXTURE_PAGE_SIZE;
+	}
+}
+
+INLINE UINT16 psx_texture4_fetch( UINT16 *p_clut, UINT32 tx, UINT32 ty, UINT32 u, UINT32 v )
+{
+	if( m_p_texture4_page != NULL )
+	{
+		return p_clut[ m_p_texture4_page[ ( ( v & 255 ) << 8 ) | ( u & 255 ) ] ];
+	}
+	return p_clut[ ( *( m_p_p_vram[ ty + v ] + tx + ( u >> 2 ) ) >> ( ( u & 3 ) << 2 ) ) & 0x0f ];
+}
+
+INLINE UINT16 psx_texture8_fetch( UINT16 *p_clut, UINT32 tx, UINT32 ty, UINT32 u, UINT32 v )
+{
+	if( m_p_texture8_page != NULL )
+	{
+		return p_clut[ m_p_texture8_page[ ( ( v & 255 ) << 8 ) | ( u & 255 ) ] ];
+	}
+	return p_clut[ ( *( m_p_p_vram[ ty + v ] + tx + ( u >> 1 ) ) >> ( ( u & 1 ) << 3 ) ) & 0xff ];
+}
+
 static void psx_build_reciprocal_table( void )
 {
 	UINT32 n;
@@ -687,6 +892,7 @@ static void psx_gpu_init( running_machine *machine )
 
 	psx_build_reciprocal_table();
 	m_b_lasttpagevalid = 0;
+	m_b_texture_cache_framebuffer_dirty = 0;
 
 	m_n_gpustatus = 0x14802000;
 	m_n_gpuinfo = 0;
@@ -696,6 +902,11 @@ static void psx_gpu_init( running_machine *machine )
 
 	m_n_vram_size = width * height;
 	m_p_vram = auto_alloc_array_clear(machine, UINT16, m_n_vram_size );
+	m_p_texture4_cache = auto_alloc_array(machine, UINT8, PSX_TEXTURE_PAGE_COUNT * PSX_TEXTURE_PAGE_SIZE );
+	m_p_texture8_cache = auto_alloc_array(machine, UINT8, PSX_TEXTURE_PAGE_COUNT * PSX_TEXTURE_PAGE_SIZE );
+	psx_texture_cache_mark_all_dirty();
+	m_p_texture4_page = NULL;
+	m_p_texture8_page = NULL;
 
 	for( n_line = 0; n_line < 1024; n_line++ )
 	{
@@ -1147,6 +1358,7 @@ INLINE void decode_tpage( running_machine *machine, struct PSXGPU *p_psxgpu, UIN
 	n_tx = psxgpu.n_tx; \
 	n_ty = psxgpu.n_ty; \
 	p_clut = m_p_p_vram[ n_cluty ] + n_clutx; \
+	psx_texture_cache_prepare( &psxgpu ); \
 	switch( psxgpu.n_tp ) \
 	{ \
 	case 0: \
@@ -1225,12 +1437,12 @@ INLINE void decode_tpage( running_machine *machine, struct PSXGPU *p_psxgpu, UIN
 #define TEXTURE4BIT( TXV, TXU ) \
 	while( n_distance > 0 ) \
 	{ \
-		n_bgr = p_clut[ ( *( m_p_p_vram[ n_ty + TXV ] + n_tx + ( TXU >> 2 ) ) >> ( ( TXU & 0x03 ) << 2 ) ) & 0x0f ];
+		n_bgr = psx_texture4_fetch( p_clut, n_tx, n_ty, TXU, TXV );
 
 #define TEXTURE8BIT( TXV, TXU ) \
 	while( n_distance > 0 ) \
 	{ \
-		n_bgr = p_clut[ ( *( m_p_p_vram[ n_ty + TXV ] + n_tx + ( TXU >> 1 ) ) >> ( ( TXU & 0x01 ) << 3 ) ) & 0xff ];
+		n_bgr = psx_texture8_fetch( p_clut, n_tx, n_ty, TXU, TXV );
 
 #define TEXTURE15BIT( TXV, TXU ) \
 	while( n_distance > 0 ) \
@@ -1672,6 +1884,7 @@ static void FlatPolygon( running_machine *machine, int n_points )
 		n_cx2.d += n_dx2;
 		n_y++;
 	}
+	PSX_TEXTURE_CACHE_MARK_POLYGON( FlatPolygon )
 }
 
 static void FlatTexturedPolygon( running_machine *machine, int n_points )
@@ -1894,6 +2107,7 @@ static void FlatTexturedPolygon( running_machine *machine, int n_points )
 		n_cv2.d += n_dv2;
 		n_y++;
 	}
+	PSX_TEXTURE_CACHE_MARK_POLYGON( FlatTexturedPolygon )
 }
 
 static void GouraudPolygon( running_machine *machine, int n_points )
@@ -2107,6 +2321,7 @@ static void GouraudPolygon( running_machine *machine, int n_points )
 		n_cb2.d += n_db2;
 		n_y++;
 	}
+	PSX_TEXTURE_CACHE_MARK_POLYGON( GouraudPolygon )
 }
 
 static void GouraudTexturedPolygon( running_machine *machine, int n_points )
@@ -2412,6 +2627,7 @@ static void GouraudTexturedPolygon( running_machine *machine, int n_points )
 		n_cv2.d += n_dv2;
 		n_y++;
 	}
+	PSX_TEXTURE_CACHE_MARK_POLYGON( GouraudTexturedPolygon )
 }
 
 static void MonochromeLine( void )
@@ -2512,6 +2728,11 @@ static void MonochromeLine( void )
 		n_y.d += n_dy;
 		n_len--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		(n_xstart < n_xend) ? n_xstart : n_xend,
+		(n_ystart < n_yend) ? n_ystart : n_yend,
+		(n_xstart < n_xend) ? ( n_xend - n_xstart + 1 ) : ( n_xstart - n_xend + 1 ),
+		(n_ystart < n_yend) ? ( n_yend - n_ystart + 1 ) : ( n_ystart - n_yend + 1 ) );
 }
 
 static void GouraudLine( void )
@@ -2627,6 +2848,11 @@ static void GouraudLine( void )
 		n_b.d += n_db;
 		n_distance--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		(n_xstart < n_xend) ? n_xstart : n_xend,
+		(n_ystart < n_yend) ? n_ystart : n_yend,
+		(n_xstart < n_xend) ? ( n_xend - n_xstart + 1 ) : ( n_xstart - n_xend + 1 ),
+		(n_ystart < n_yend) ? ( n_yend - n_ystart + 1 ) : ( n_ystart - n_yend + 1 ) );
 }
 
 static void FrameBufferRectangleDraw( void )
@@ -2677,6 +2903,11 @@ static void FrameBufferRectangleDraw( void )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.FlatRectangle.n_coord ),
+		COORD_Y( m_packet.FlatRectangle.n_coord ),
+		SIZE_W( m_packet.FlatRectangle.n_size ),
+		SIZE_H( m_packet.FlatRectangle.n_size ) );
 }
 
 static void FlatRectangle( running_machine *machine )
@@ -2742,6 +2973,11 @@ static void FlatRectangle( running_machine *machine )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.FlatRectangle.n_coord ) + m_n_drawoffset_x,
+		COORD_Y( m_packet.FlatRectangle.n_coord ) + m_n_drawoffset_y,
+		SIZE_W( m_packet.FlatRectangle.n_size ),
+		SIZE_H( m_packet.FlatRectangle.n_size ) );
 }
 
 static void FlatRectangle8x8( running_machine *machine )
@@ -2807,6 +3043,9 @@ static void FlatRectangle8x8( running_machine *machine )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.FlatRectangle8x8.n_coord ) + m_n_drawoffset_x,
+		COORD_Y( m_packet.FlatRectangle8x8.n_coord ) + m_n_drawoffset_y, 8, 8 );
 }
 
 static void FlatRectangle16x16( running_machine *machine )
@@ -2872,6 +3111,9 @@ static void FlatRectangle16x16( running_machine *machine )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.FlatRectangle16x16.n_coord ) + m_n_drawoffset_x,
+		COORD_Y( m_packet.FlatRectangle16x16.n_coord ) + m_n_drawoffset_y, 16, 16 );
 }
 
 static void FlatTexturedRectangle( running_machine *machine )
@@ -2970,6 +3212,11 @@ static void FlatTexturedRectangle( running_machine *machine )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.FlatTexturedRectangle.n_coord ) + m_n_drawoffset_x,
+		COORD_Y( m_packet.FlatTexturedRectangle.n_coord ) + m_n_drawoffset_y,
+		SIZE_W( m_packet.FlatTexturedRectangle.n_size ),
+		SIZE_H( m_packet.FlatTexturedRectangle.n_size ) );
 }
 
 static void Sprite8x8( running_machine *machine )
@@ -3068,6 +3315,9 @@ static void Sprite8x8( running_machine *machine )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.Sprite8x8.n_coord ) + m_n_drawoffset_x,
+		COORD_Y( m_packet.Sprite8x8.n_coord ) + m_n_drawoffset_y, 8, 8 );
 }
 
 static void Sprite16x16( running_machine *machine )
@@ -3166,6 +3416,9 @@ static void Sprite16x16( running_machine *machine )
 		n_y++;
 		n_h--;
 	}
+	psx_texture_cache_mark_framebuffer_region_dirty(
+		COORD_X( m_packet.Sprite16x16.n_coord ) + m_n_drawoffset_x,
+		COORD_Y( m_packet.Sprite16x16.n_coord ) + m_n_drawoffset_y, 16, 16 );
 }
 
 static void Dot( void )
@@ -3202,6 +3455,7 @@ static void Dot( void )
 			m_p_n_redshade[ MID_LEVEL | n_r ] |
 			m_p_n_greenshade[ MID_LEVEL | n_g ] |
 			m_p_n_blueshade[ MID_LEVEL | n_b ] );
+		psx_texture_cache_mark_framebuffer_region_dirty( n_x, n_y, 1, 1 );
 	}
 }
 
@@ -3248,6 +3502,11 @@ static void MoveImage( void )
 		n_dsty++;
 		n_h--;
 	}
+	psx_texture_cache_mark_region_dirty(
+		COORD_X( m_packet.MoveImage.vertex[ 1 ].n_coord ),
+		COORD_Y( m_packet.MoveImage.vertex[ 1 ].n_coord ),
+		SIZE_W( m_packet.MoveImage.n_size ),
+		SIZE_H( m_packet.MoveImage.n_size ) );
 }
 
 void psx_gpu_write( running_machine *machine, UINT32 *p_ram, INT32 n_size )
@@ -3642,6 +3901,11 @@ void psx_gpu_write( running_machine *machine, UINT32 *p_ram, INT32 n_size )
 					}
 					data >>= 16;
 				}
+				psx_texture_cache_mark_region_dirty(
+					m_packet.n_entry[ 1 ] & 0xffff,
+					m_packet.n_entry[ 1 ] >> 16,
+					m_packet.n_entry[ 2 ] & 0xffff,
+					m_packet.n_entry[ 2 ] >> 16 );
 			}
 			break;
 		case 0xc0:
