@@ -1577,11 +1577,11 @@ MACHINE_DRIVER_END
 
 static MACHINE_DRIVER_START( coh700_namcos12 )
 	/* basic machine hardware */
-	MDRV_CPU_ADD("maincpu",  CXD8661R, 25000000)
+	MDRV_CPU_ADD("maincpu",  CXD8661R, 49152000)
 	MDRV_CPU_PROGRAM_MAP( namcos12_map)
 	MDRV_CPU_VBLANK_INT("screen", psx_vblank)
 
-	MDRV_CPU_ADD("sub", H83002, 16384000)
+	MDRV_CPU_ADD("sub", H83002, 14745600 )	/* verified 14.7456 MHz */
 	MDRV_CPU_PROGRAM_MAP( s12h8rwmap)
 	MDRV_CPU_IO_MAP( s12h8iomap)
 	MDRV_CPU_VBLANK_INT("screen", irq1_line_pulse)
@@ -1590,9 +1590,7 @@ static MACHINE_DRIVER_START( coh700_namcos12 )
 
 	/* video hardware */
 	MDRV_SCREEN_ADD("screen", RASTER)
-	// 화면 주사율을 실기기 수치인 59.185606 Hz로 수정
-	MDRV_SCREEN_REFRESH_RATE( 59.185606 )
-	// PSX 비디오 칩셋 규격에 맞는 정확한 VBLANK 타임 적용 (0에서 실측치로 변경)
+	MDRV_SCREEN_REFRESH_RATE( 60 )
 	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
 	MDRV_SCREEN_SIZE( 1024, 1024 )
