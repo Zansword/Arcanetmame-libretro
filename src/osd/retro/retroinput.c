@@ -939,6 +939,45 @@ printf("P1 Error creating keyboard device\n");
 
 }
 
+#define UI_HOTKEY_HOLD_FRAMES 90
+
+/* Returns non-zero once the configured UI hotkey combination is active for a given player */
+static UINT8 retro_ui_hotkey_state(int player)
+{
+   static int hold_counter[8] = {0};
+
+   switch (ui_hotkey_mode)
+   {
+      case UI_HOTKEY_L3:
+         return input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3) ? 1 : 0;
+
+      case UI_HOTKEY_R3:
+         return input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) ? 1 : 0;
+
+      case UI_HOTKEY_L2_R2:
+         return (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) &&
+                 input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2)) ? 1 : 0;
+
+      case UI_HOTKEY_START_SELECT:
+         return (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START) &&
+                 input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT)) ? 1 : 0;
+
+      case UI_HOTKEY_SELECT_HOLD:
+         if (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT))
+         {
+            if (hold_counter[player] < UI_HOTKEY_HOLD_FRAMES)
+               hold_counter[player]++;
+         }
+         else
+            hold_counter[player] = 0;
+         return (hold_counter[player] >= UI_HOTKEY_HOLD_FRAMES) ? 1 : 0;
+
+      case UI_HOTKEY_L2:
+      default:
+         return input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) ? 1 : 0;
+   }
+}
+
 void retro_poll_mame_input(void)
 {
 	input_poll_cb();
@@ -1023,7 +1062,7 @@ void retro_poll_mame_input(void)
    }
 
 	P1_state[KEY_F11] = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);
-	P1_state[KEY_TAB] = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2);
+	P1_state[KEY_TAB] = retro_ui_hotkey_state(0);
 	
 	P1_state[KEY_F2] = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3);
 	
@@ -1042,7 +1081,7 @@ void retro_poll_mame_input(void)
 	P1_state[KEY_JOYSTICK_R] = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT);
 
 	P2_state[KEY_F11] = input_state_cb(1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);
-	P2_state[KEY_TAB] = input_state_cb(1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2);
+	P2_state[KEY_TAB] = retro_ui_hotkey_state(1);
 	
 	P2_state[KEY_F2] = input_state_cb(1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3);
 	
@@ -1081,6 +1120,25 @@ void retro_poll_mame_input(void)
          state[KEY_JOYSTICK_D] = input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN);
          state[KEY_JOYSTICK_L] = input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT);
          state[KEY_JOYSTICK_R] = input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT);
+      }
+   }
+
+   /* SOCD Cleaner (Simultaneous Opposite Cardinal Direction - Neutral) */
+   {
+      UINT8 *all_states[8] = { P1_state, P2_state, P3_state, P4_state, P5_state, P6_state, P7_state, P8_state };
+      int p;
+      for (p = 0; p < 8; p++)
+      {
+         if (all_states[p][KEY_JOYSTICK_L] && all_states[p][KEY_JOYSTICK_R])
+         {
+            all_states[p][KEY_JOYSTICK_L] = 0;
+            all_states[p][KEY_JOYSTICK_R] = 0;
+         }
+         if (all_states[p][KEY_JOYSTICK_U] && all_states[p][KEY_JOYSTICK_D])
+         {
+            all_states[p][KEY_JOYSTICK_U] = 0;
+            all_states[p][KEY_JOYSTICK_D] = 0;
+         }
       }
    }
 }

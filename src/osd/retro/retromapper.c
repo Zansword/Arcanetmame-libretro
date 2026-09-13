@@ -98,6 +98,7 @@ void retro_set_environment(retro_environment_t cb)
       { "arcanetmame_contrast", "Screen contrast (Restart); 1.0|0.5|0.6|0.7|0.8|0.9|1.1|1.2|1.3|1.4|1.5|1.6|1.7|1.8|1.9|2.0" },
       { "arcanetmame_gamma", "Screen gamma (Restart); 1.0|0.5|0.6|0.7|0.8|0.9|1.1|1.2|1.3|1.4|1.5|1.6|1.7|1.8|1.9|2.0|2.1|2.2|2.3|2.4|2.5|2.6|2.7|2.8|2.9|3.0" },
       { "arcanetmame_videoapproach1_enable", "Fixed 1024x768 rendering; disabled|enabled" },
+      { "arcanetmame_ui_hotkey", "MAME UI hotkey (opens Tab menu); L2|L3|R3|Select (hold)|Start + Select|L2 + R2" },
       { NULL, NULL },
    };
 
@@ -246,6 +247,25 @@ static void check_variables(void)
          videoapproach1_enable = false;
       if (!strcmp(var.value, "enabled"))
          videoapproach1_enable = true;
+   }
+
+   var.key = "arcanetmame_ui_hotkey";
+   var.value = NULL;
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "L2"))
+         ui_hotkey_mode = UI_HOTKEY_L2;
+      else if (!strcmp(var.value, "L3"))
+         ui_hotkey_mode = UI_HOTKEY_L3;
+      else if (!strcmp(var.value, "R3"))
+         ui_hotkey_mode = UI_HOTKEY_R3;
+      else if (!strcmp(var.value, "Select (hold)"))
+         ui_hotkey_mode = UI_HOTKEY_SELECT_HOLD;
+      else if (!strcmp(var.value, "Start + Select"))
+         ui_hotkey_mode = UI_HOTKEY_START_SELECT;
+      else if (!strcmp(var.value, "L2 + R2"))
+         ui_hotkey_mode = UI_HOTKEY_L2_R2;
    }
 
 }

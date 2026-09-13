@@ -53,6 +53,18 @@ static char screen_brightness[8] = "1.0";
 static char screen_contrast[8] = "1.0";
 static char screen_gamma[8] = "1.0";
 
+/* Selectable RetroArch input used to open the MAME UI (Tab menu) */
+enum
+{
+   UI_HOTKEY_L2 = 0,
+   UI_HOTKEY_L3,
+   UI_HOTKEY_R3,
+   UI_HOTKEY_SELECT_HOLD,
+   UI_HOTKEY_START_SELECT,
+   UI_HOTKEY_L2_R2,
+};
+static int ui_hotkey_mode = UI_HOTKEY_L2;
+
 static void extract_basename(char *buf, const char *path, size_t size)
 {
    const char *base = strrchr(path, '/');
