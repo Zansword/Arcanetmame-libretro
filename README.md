@@ -14,6 +14,10 @@ Arcanetmame-libretro는 라즈베리파이 4와 같은 제한된 성능의 싱�
 * 레트로파이(RetroPie) 사용자는 해당 스크립트를 `scriptmodule` 폴더에 배치하세요.
 * 아래의 `arcanetmame_libretro.info` 내용을 파일로 저장하여 레트로아크의 `info` 폴더에 넣으시면 됩니다.
 
+### 오버클럭 설정(라즈베리파이4)
+* /boot/firmware/config.txt
+* over_voltage=6
+* arm_freq=2000
 
 -EN-
 Arcanetmame-libretro is a Libretro port based on MAME 0.135—the last legacy release using a frame-based architecture—tailored to make MAME practical on low-performance single-board computers like the Raspberry Pi 4.
@@ -28,6 +32,11 @@ Modern device-based MAME architecture is far too heavy for SBC hardware when run
 * Check the included `.bat` file for build options.
 * For RetroPie users, place the script inside your `scriptmodule` folder.
 * Save the `.info` block below as `arcanetmame_libretro.info` and place it in your RetroArch `info` directory.
+
+### Overclock Settings(Rpi4)
+* /boot/firmware/config.txt
+* over_voltage=6
+* arm_freq=2000
 
 Target ROM Set: MAME 0.135 (ClrMAMEPro DAT compatible)
   
