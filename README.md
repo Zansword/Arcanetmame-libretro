@@ -30,38 +30,41 @@ Modern device-based MAME architecture is far too heavy for SBC hardware when run
 * Save the `.info` block below as `arcanetmame_libretro.info` and place it in your RetroArch `info` directory.
 
 Target ROM Set: MAME 0.135 (ClrMAMEPro DAT compatible)
+  
+[arcanetmame_libretro.info]  
+Software Information  
+display_name = "Arcanetmame (MAME 0135)"  
+authors = "MAMEdev"  
+supported_extensions = "zip|7z"  
+corename = "Arcanetmame (0.135)"  
+license = "MAME"  
+permissions = ""  
+display_version = "0.135"  
+categories = "Emulator"  
 
-[arcanetmame_libretro.info]
-Software Information
-display_name = "Arcanetmame (MAME 0135)"
-authors = "MAMEdev"
-supported_extensions = "zip|7z"
-corename = "Arcanetmame (0.135)"
-license = "MAME"
-permissions = ""
-display_version = "0.135"
-categories = "Emulator"
 
-Hardware Information
-manufacturer = "Various"
-systemname = "Arcade (various)"
-systemid = "mame"
+Hardware Information  
+manufacturer = "Various"  
+systemname = "Arcade (various)"  
+systemid = "mame"  
 
-Libretro Features
-supports_no_game = "false"
-database = "MAME 0135"
-savestate = "true"
-savestate_features = "deterministic"
-cheats = "false"
-input_descriptors = "true"
-input_headset = "false"
-memory_descriptors = "false"
-libretro_saves = "true"
-core_options = "true"
-core_options_version = "1.0"
-hw_render = "false"
-disk_control = "false"
-notes = "(!) The BIOS files must be inside the ROM directory.|"
-supports_netplay = "true"
 
-description = "Frame-based emulation MAME for Rpi4 and Kaillera Netplay"
+Libretro Features  
+supports_no_game = "false"  
+database = "MAME 0135"  
+savestate = "true"  
+savestate_features = "deterministic"  
+cheats = "false"  
+input_descriptors = "true"  
+input_headset = "false"  
+memory_descriptors = "false"  
+libretro_saves = "true"  
+core_options = "true"  
+core_options_version = "1.0"  
+hw_render = "false"  
+disk_control = "false"  
+notes = "(!) The BIOS files must be inside the ROM directory.|"  
+supports_netplay = "true"  
+
+
+description = "Frame-based emulation MAME for Rpi4 and Kaillera Netplay"  
