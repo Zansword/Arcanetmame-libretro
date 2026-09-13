@@ -32,7 +32,7 @@ Modern device-based MAME architecture is far too heavy for SBC hardware when run
 Target ROM Set: MAME 0.135 (ClrMAMEPro DAT compatible)
 
 [arcanetmame_libretro.info]
-* # Software Information
+Software Information
 display_name = "Arcanetmame (MAME 0135)"
 authors = "MAMEdev"
 supported_extensions = "zip|7z"
@@ -42,12 +42,12 @@ permissions = ""
 display_version = "0.135"
 categories = "Emulator"
 
-# Hardware Information
+Hardware Information
 manufacturer = "Various"
 systemname = "Arcade (various)"
 systemid = "mame"
 
-# Libretro Features
+Libretro Features
 supports_no_game = "false"
 database = "MAME 0135"
 savestate = "true"
