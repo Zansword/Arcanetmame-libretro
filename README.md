@@ -6,13 +6,13 @@ Arcanetmame-libretro는 라즈베리파이 4와 같은 제한된 성능의 싱�
 현대의 디바이스 기반(Device-based) MAME는 라즈베리파이 같은 저전력 기기에서 3D 아케이드 게임을 돌리기엔 지나치게 무겁습니다. 본 프로젝트는 가장 대중적인 남코 시스템 12(Namco System 12)의 에뮬레이션을 소프트웨어적 최적화로 가볍게 다듬어, 프레임 기반 MAME의 실용성과 가능성을 증명하고자 하는 실험입니다.
 
 ### 네트워크 플레이 지원
-* **Kaillera-Reborn (K-arch)** 기반의 변종 레트로아치(RetroArch)를 통한 네트워크 플레이를 지원합니다.
+* **Kaillera-Reborn (K-arch)** 기반의 변종 레트로아크(RetroArch)를 통한 네트워크 플레이를 지원합니다.
 * 특정 드라이버 구동 중 싱크(Desync)가 발생할 경우, 해당 드라이버 레벨의 비결정성(Non-determinism) 요소 보강이 필요할 수 있습니다.
 
 ### 설치 및 빌드 가이드
 * 상세 빌드 옵션은 포함된 `.bat` 파일을 참고하시기 바랍니다.
 * 레트로파이(RetroPie) 사용자는 해당 스크립트를 `scriptmodule` 폴더에 배치하세요.
-* 아래의 `arcanetmame_libretro.info` 내용을 파일로 저장하여 레트로아치 `info` 폴더에 넣으시면 됩니다.
+* 아래의 `arcanetmame_libretro.info` 내용을 파일로 저장하여 레트로아크의 `info` 폴더에 넣으시면 됩니다.
 
 
 -EN-
