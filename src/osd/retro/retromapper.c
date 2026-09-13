@@ -579,19 +579,33 @@ void retro_unload_game(void)
 size_t retro_serialize_size(void)
 {
    running_machine *machine = retro_get_machine();
-   return machine ? state_save_get_size(machine) : 0;
+   return machine != NULL ? state_save_get_size(machine) : 0;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
    running_machine *machine = retro_get_machine();
-   return machine != NULL && state_save_write_buffer(machine, data, size) == STATERR_NONE;
+   size_t required_size;
+
+   if (machine == NULL || data == NULL)
+      return false;
+
+   required_size = state_save_get_size(machine);
+   return required_size != 0 && size >= required_size &&
+      state_save_write_buffer(machine, data, size) == STATERR_NONE;
 }
 
 bool retro_unserialize(const void *data, size_t size)
 {
    running_machine *machine = retro_get_machine();
-   return machine != NULL && state_save_read_buffer(machine, data, size) == STATERR_NONE;
+   size_t required_size;
+
+   if (machine == NULL || data == NULL)
+      return false;
+
+   required_size = state_save_get_size(machine);
+   return required_size != 0 && size >= required_size &&
+      state_save_read_buffer(machine, data, size) == STATERR_NONE;
 }
 
 unsigned retro_get_region (void) {return RETRO_REGION_NTSC;}

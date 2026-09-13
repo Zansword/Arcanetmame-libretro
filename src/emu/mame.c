@@ -1605,6 +1605,7 @@ static void init_machine(running_machine *machine)
 	generic_video_init(machine);
 	generic_sound_init(machine);
 	mame->rand_seed = 0x9d14abd7;
+	state_save_register_global(machine, mame->rand_seed);
 
 	/* initialize the timers and allocate a soft_reset timer */
 	/* this must be done before cpu_init so that CPU's can allocate timers */

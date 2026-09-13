@@ -1001,6 +1001,22 @@ static UINT32 m_n_dmaoffset;
 static UINT32 m_n_dmabias;
 static UINT32 m_n_tektagdmaoffset;
 static int has_tektagt_dma;
+static UINT8 kcram[ 12 ];
+static int m_n_keycus_bank_is_ram;
+static int m_n_has_keycus_bank;
+
+static void namcos12_postload(running_machine *machine, void *param)
+{
+	const address_space *space = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM);
+
+	bankoffset_w(space, 0, m_n_bankoffset, 0xffffffff);
+	if (!m_n_has_keycus_bank)
+		return;
+	if (m_n_keycus_bank_is_ram)
+		memory_set_bankptr(machine, 2, kcram);
+	else
+		memory_set_bankptr(machine, 2, memory_region(machine, "user1") + 0x20280);
+}
 
 static WRITE32_HANDLER( dmaoffset_w )
 {
@@ -1160,15 +1176,15 @@ static void system11gun_install( running_machine *machine )
 	memory_install_read32_handler (cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x1f780000, 0x1f78000f, 0, 0, system11gun_r );
 }
 
-static UINT8 kcram[ 12 ];
-
 static WRITE32_HANDLER( kcoff_w )
 {
+	m_n_keycus_bank_is_ram = 0;
 	memory_set_bankptr(space->machine,  2, memory_region( space->machine, "user1" ) + 0x20280 );
 }
 
 static WRITE32_HANDLER( kcon_w )
 {
+	m_n_keycus_bank_is_ram = 1;
 	memory_set_bankptr(space->machine,  2, kcram );
 }
 
@@ -1229,6 +1245,8 @@ static MACHINE_RESET( namcos12 )
 	psx_machine_init(machine);
 	bankoffset_w(space,0,0,0xffffffff);
 	has_tektagt_dma = 0;
+	m_n_keycus_bank_is_ram = 0;
+	m_n_has_keycus_bank = 0;
 
 	if( strcmp( machine->gamedrv->name, "tektagt" ) == 0 ||
 		strcmp( machine->gamedrv->name, "tektagta" ) == 0 ||
@@ -1259,12 +1277,14 @@ static MACHINE_RESET( namcos12 )
 		strcmp( machine->gamedrv->name, "sws2001" ) == 0 ||
 		strcmp( machine->gamedrv->name, "ghlpanic" ) == 0 )
 	{
+		m_n_has_keycus_bank = 1;
 		/* this is based on guesswork, it might not even be keycus. */
 		memory_install_read32_handler (space, 0x1fc20280, 0x1fc2028b, 0, 0, (read32_space_func)SMH_BANK(2) );
 		memory_install_write32_handler(space, 0x1f008000, 0x1f008003, 0, 0, kcon_w );
 		memory_install_write32_handler(space, 0x1f018000, 0x1f018003, 0, 0, kcoff_w );
 
 		memset( kcram, 0, sizeof( kcram ) );
+		m_n_keycus_bank_is_ram = 1;
 		memory_set_bankptr(space->machine,  2, kcram );
 	}
 }
@@ -1479,6 +1499,15 @@ static DRIVER_INIT( namcos12 )
 	state_save_register_global(machine,  m_n_dmaoffset );
 	state_save_register_global(machine,  m_n_dmabias );
 	state_save_register_global(machine,  m_n_bankoffset );
+	state_save_register_global(machine,  s12_porta );
+	state_save_register_global(machine,  s12_rtcstate );
+	state_save_register_global(machine,  s12_lastpB );
+	state_save_register_global(machine,  s12_setstate );
+	state_save_register_global(machine,  s12_setnum );
+	state_save_register_global_array(machine,  s12_settings );
+	state_save_register_global_array(machine,  kcram );
+	state_save_register_global(machine,  m_n_keycus_bank_is_ram );
+	state_save_register_postload(machine, namcos12_postload, NULL);
 }
 
 static DRIVER_INIT( namcos12_tektagt )
@@ -1517,6 +1546,9 @@ static DRIVER_INIT( namcos12_tektagt )
 	state_save_register_global_array(machine,  s12_settings );
 	state_save_register_global(machine,  ttt_cnt );
 	state_save_register_global_array(machine,  ttt_val );
+	state_save_register_global_array(machine,  kcram );
+	state_save_register_global(machine,  m_n_keycus_bank_is_ram );
+	state_save_register_postload(machine, namcos12_postload, NULL);
 }
 
 static DRIVER_INIT( ptblank2 )
